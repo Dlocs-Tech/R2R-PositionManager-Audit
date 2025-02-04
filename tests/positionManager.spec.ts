@@ -557,7 +557,7 @@ export default async function suite(): Promise<void> {
 
             await USDTContract.connect(user1).approve(PositionManager.address, amount);
 
-            await PositionManager.connect(manager).setFee(100000, user2.address);
+            await PositionManager.connect(deployer).setFee(100000, user2.address);
 
             await PositionManagerDistributor.connect(user1).deposit(amount);
 
@@ -1284,7 +1284,7 @@ export default async function suite(): Promise<void> {
 
             await USDTContract.connect(user1).approve(PositionManager.address, amount);
 
-            await PositionManager.connect(manager).setFee(100000, user2.address);
+            await PositionManager.connect(deployer).setFee(100000, user2.address);
 
             await PositionManagerDistributor.connect(user1).deposit(amount);
 
@@ -2020,7 +2020,7 @@ export default async function suite(): Promise<void> {
 
             await USDTContract.connect(user1).approve(PositionManager.address, amount);
 
-            await PositionManager.connect(manager).setFee(100000, user2.address);
+            await PositionManager.connect(deployer).setFee(100000, user2.address);
 
             await PositionManagerDistributor.connect(user1).deposit(amount);
 
@@ -2744,7 +2744,7 @@ export default async function suite(): Promise<void> {
 
             await USDTContract.connect(user1).approve(PositionManager.address, amount);
 
-            await PositionManager.connect(manager).setFee(100000, user2.address);
+            await PositionManager.connect(deployer).setFee(100000, user2.address);
 
             await PositionManagerDistributor.connect(user1).deposit(amount);
 
