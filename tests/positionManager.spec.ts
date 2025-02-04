@@ -573,7 +573,7 @@ export default async function suite(): Promise<void> {
         });
 
         it("revert: fails to distribute rewards if the contract has no balance", async function () {
-            await expect(PositionManager.distributeRewards()).to.be.revertedWith("InvalidEntry");
+            await expect(PositionManager.connect(manager).distributeRewards()).to.be.revertedWith("InvalidEntry");
         });
 
         it("should distribute to the fundsDistributor (zero users)", async function () {
@@ -1300,7 +1300,7 @@ export default async function suite(): Promise<void> {
         });
 
         it("revert: fails to distribute rewards if the contract has no balance", async function () {
-            await expect(PositionManager.distributeRewards()).to.be.revertedWith("InvalidEntry");
+            await expect(PositionManager.connect(manager).distributeRewards()).to.be.revertedWith("InvalidEntry");
         });
 
         it("should distribute to the fundsDistributor (zero users)", async function () {
@@ -2036,7 +2036,7 @@ export default async function suite(): Promise<void> {
         });
 
         it("revert: fails to distribute rewards if the contract has no balance", async function () {
-            await expect(PositionManager.distributeRewards()).to.be.revertedWith("InvalidEntry");
+            await expect(PositionManager.connect(manager).distributeRewards()).to.be.revertedWith("InvalidEntry");
         });
 
         it("should distribute to the fundsDistributor (zero users)", async function () {
@@ -2763,7 +2763,7 @@ export default async function suite(): Promise<void> {
         });
 
         it("revert: fails to distribute rewards if the contract has no balance", async function () {
-            await expect(PositionManager.distributeRewards()).to.be.revertedWith("InvalidEntry");
+            await expect(PositionManager.connect(manager).distributeRewards()).to.be.revertedWith("InvalidEntry");
         });
 
         it("should distribute to the fundsDistributor (zero users)", async function () {
