@@ -24,7 +24,7 @@ contract FeeManagement {
 
     address public feeReceiver;
 
-    function setFee(uint256 _depositFee, address _feeReceiver) external {
+    function _setFee(uint256 _depositFee, address _feeReceiver) internal {
         if (_depositFee > MAX_FEE_PERCENTAGE) {
             revert InvalidEntry();
         }

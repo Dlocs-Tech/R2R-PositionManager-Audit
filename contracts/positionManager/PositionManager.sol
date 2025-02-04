@@ -438,6 +438,10 @@ contract PositionManager is FeeManagement, IPancakeV3SwapCallback, AccessControl
         slippage = _slippage;
     }
 
+    function setFee(uint256 _depositFee, address _feeReceiver) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _setFee(_depositFee, _feeReceiver);
+    }
+
     /**
      * @notice The sqrt price and the current tick of the pool.
      * @return sqrtPriceX96 The sqrt price of the pool.
