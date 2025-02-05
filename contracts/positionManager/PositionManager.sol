@@ -83,7 +83,10 @@ contract PositionManager is FeeManagement, IPancakeV3SwapCallback, AccessControl
     uint256 public fundsDistributorPercentage;
 
     /// @notice Max slippage percentage allowed in swaps.
-    uint256 private slippage = 10000; // 1%
+    uint256 private slippage = 10_000; // 1%
+
+    /// @notice Minimum USDT deposit amount.
+    uint256 public minDepositAmount = 10e18; // 10 USDT
 
     /// @notice Path used to swap USDT to token0.
     bytes public usdtToToken0Path;
@@ -166,7 +169,7 @@ contract PositionManager is FeeManagement, IPancakeV3SwapCallback, AccessControl
      * @dev The user must approve the contract to spend the USDT before calling this function.
      */
     function deposit(uint256 depositAmount, address sender) external onlyFactory returns (uint256 shares) {
-        if (depositAmount == 0) revert InvalidInput();
+        if (depositAmount < minDepositAmount) revert InvalidInput();
 
         // Transfer USDT from user to contract
         usdt.safeTransferFrom(sender, address(this), depositAmount);
@@ -485,6 +488,10 @@ contract PositionManager is FeeManagement, IPancakeV3SwapCallback, AccessControl
     function setSlippage(uint256 _slippage) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (_slippage > MAX_PERCENTAGE) revert InvalidInput();
         slippage = _slippage;
+    }
+
+    function setMinDepositAmount(uint256 _minDepositAmount) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        minDepositAmount = _minDepositAmount;
     }
 
     function setFee(uint256 _depositFee, address _feeReceiver) external onlyRole(DEFAULT_ADMIN_ROLE) {
