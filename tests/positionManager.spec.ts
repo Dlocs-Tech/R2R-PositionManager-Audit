@@ -573,7 +573,7 @@ export default async function suite(): Promise<void> {
         });
 
         it("revert: fails to distribute rewards if the contract has no balance", async function () {
-            await expect(PositionManager.connect(manager).distributeRewards()).to.be.revertedWith("InvalidEntry");
+            await expect(PositionManager.connect(manager).distributeRewards(0)).to.be.revertedWith("InvalidEntry");
         });
 
         it("should distribute to the fundsDistributor (zero users)", async function () {
@@ -581,7 +581,7 @@ export default async function suite(): Promise<void> {
 
             await USDTContract.connect(deployer).transfer(PositionManagerDistributor.address, amount);
 
-            await PositionManager.connect(manager).distributeRewards();
+            await PositionManager.connect(manager).distributeRewards(0);
 
             const FundsDistributorBalance = await WBNBContract.balanceOf(FundsDistributor.address);
 
@@ -599,7 +599,7 @@ export default async function suite(): Promise<void> {
 
             await USDTContract.connect(deployer).transfer(PositionManagerDistributor.address, amount);
 
-            await PositionManager.connect(manager).distributeRewards();
+            await PositionManager.connect(manager).distributeRewards(0);
 
             const user1USDTBalance = await USDTContract.balanceOf(user1.address);
 
@@ -633,7 +633,7 @@ export default async function suite(): Promise<void> {
 
             await USDTContract.connect(deployer).transfer(PositionManagerDistributor.address, amount);
 
-            await PositionManager.connect(manager).distributeRewards();
+            await PositionManager.connect(manager).distributeRewards(0);
 
             await PositionManagerDistributor.connect(user1).collectRewards();
 
@@ -686,7 +686,7 @@ export default async function suite(): Promise<void> {
 
             await USDTContract.connect(deployer).transfer(PositionManagerDistributor.address, totalAmount);
 
-            await PositionManager.connect(manager).distributeRewards();
+            await PositionManager.connect(manager).distributeRewards(0);
 
             const user1USDTBalance = await USDTContract.balanceOf(user1.address);
             const user2USDTBalance = await USDTContract.balanceOf(user2.address);
@@ -1300,7 +1300,7 @@ export default async function suite(): Promise<void> {
         });
 
         it("revert: fails to distribute rewards if the contract has no balance", async function () {
-            await expect(PositionManager.connect(manager).distributeRewards()).to.be.revertedWith("InvalidEntry");
+            await expect(PositionManager.connect(manager).distributeRewards(0)).to.be.revertedWith("InvalidEntry");
         });
 
         it("should distribute to the fundsDistributor (zero users)", async function () {
@@ -1308,7 +1308,7 @@ export default async function suite(): Promise<void> {
 
             await USDTContract.connect(deployer).transfer(PositionManagerDistributor.address, amount);
 
-            await PositionManager.connect(manager).distributeRewards();
+            await PositionManager.connect(manager).distributeRewards(0);
 
             const FundsDistributorBalance = await WBNBContract.balanceOf(FundsDistributor.address);
 
@@ -1326,7 +1326,7 @@ export default async function suite(): Promise<void> {
 
             await USDTContract.connect(deployer).transfer(PositionManagerDistributor.address, amount);
 
-            await PositionManager.connect(manager).distributeRewards();
+            await PositionManager.connect(manager).distributeRewards(0);
 
             const user1USDTBalance = await USDTContract.balanceOf(user1.address);
 
@@ -1360,7 +1360,7 @@ export default async function suite(): Promise<void> {
 
             await USDTContract.connect(deployer).transfer(PositionManagerDistributor.address, amount);
 
-            await PositionManager.connect(manager).distributeRewards();
+            await PositionManager.connect(manager).distributeRewards(0);
 
             await PositionManagerDistributor.connect(user1).collectRewards();
 
@@ -1413,7 +1413,7 @@ export default async function suite(): Promise<void> {
 
             await USDTContract.connect(deployer).transfer(PositionManagerDistributor.address, totalAmount);
 
-            await PositionManager.connect(manager).distributeRewards();
+            await PositionManager.connect(manager).distributeRewards(0);
 
             const user1USDTBalance = await USDTContract.balanceOf(user1.address);
             const user2USDTBalance = await USDTContract.balanceOf(user2.address);
@@ -2036,7 +2036,7 @@ export default async function suite(): Promise<void> {
         });
 
         it("revert: fails to distribute rewards if the contract has no balance", async function () {
-            await expect(PositionManager.connect(manager).distributeRewards()).to.be.revertedWith("InvalidEntry");
+            await expect(PositionManager.connect(manager).distributeRewards(0)).to.be.revertedWith("InvalidEntry");
         });
 
         it("should distribute to the fundsDistributor (zero users)", async function () {
@@ -2044,7 +2044,7 @@ export default async function suite(): Promise<void> {
 
             await USDTContract.connect(deployer).transfer(PositionManagerDistributor.address, amount);
 
-            await PositionManager.connect(manager).distributeRewards();
+            await PositionManager.connect(manager).distributeRewards(0);
 
             const FundsDistributorBalance = await WBNBContract.balanceOf(FundsDistributor.address);
 
@@ -2062,7 +2062,7 @@ export default async function suite(): Promise<void> {
 
             await USDTContract.connect(deployer).transfer(PositionManagerDistributor.address, amount);
 
-            await PositionManager.connect(manager).distributeRewards();
+            await PositionManager.connect(manager).distributeRewards(0);
 
             const user1USDTBalance = await USDTContract.balanceOf(user1.address);
 
@@ -2096,7 +2096,7 @@ export default async function suite(): Promise<void> {
 
             await USDTContract.connect(deployer).transfer(PositionManagerDistributor.address, amount);
 
-            await PositionManager.connect(manager).distributeRewards();
+            await PositionManager.connect(manager).distributeRewards(0);
 
             await PositionManagerDistributor.connect(user1).collectRewards();
 
@@ -2149,7 +2149,7 @@ export default async function suite(): Promise<void> {
 
             await USDTContract.connect(deployer).transfer(PositionManagerDistributor.address, totalAmount);
 
-            await PositionManager.connect(manager).distributeRewards();
+            await PositionManager.connect(manager).distributeRewards(0);
 
             const user1USDTBalance = await USDTContract.balanceOf(user1.address);
             const user2USDTBalance = await USDTContract.balanceOf(user2.address);
@@ -2763,7 +2763,7 @@ export default async function suite(): Promise<void> {
         });
 
         it("revert: fails to distribute rewards if the contract has no balance", async function () {
-            await expect(PositionManager.connect(manager).distributeRewards()).to.be.revertedWith("InvalidEntry");
+            await expect(PositionManager.connect(manager).distributeRewards(0)).to.be.revertedWith("InvalidEntry");
         });
 
         it("should distribute to the fundsDistributor (zero users)", async function () {
@@ -2771,7 +2771,7 @@ export default async function suite(): Promise<void> {
 
             await USDTContract.connect(deployer).transfer(PositionManagerDistributor.address, amount);
 
-            await PositionManager.connect(manager).distributeRewards();
+            await PositionManager.connect(manager).distributeRewards(0);
 
             const FundsDistributorBalance = await WBNBContract.balanceOf(FundsDistributor.address);
 
@@ -2789,7 +2789,7 @@ export default async function suite(): Promise<void> {
 
             await USDTContract.connect(deployer).transfer(PositionManagerDistributor.address, amount);
 
-            await PositionManager.connect(manager).distributeRewards();
+            await PositionManager.connect(manager).distributeRewards(0);
 
             const user1USDTBalance = await USDTContract.balanceOf(user1.address);
 
@@ -2823,7 +2823,7 @@ export default async function suite(): Promise<void> {
 
             await USDTContract.connect(deployer).transfer(PositionManagerDistributor.address, amount);
 
-            await PositionManager.connect(manager).distributeRewards();
+            await PositionManager.connect(manager).distributeRewards(0);
 
             await PositionManagerDistributor.connect(user1).collectRewards();
 
@@ -2876,7 +2876,7 @@ export default async function suite(): Promise<void> {
 
             await USDTContract.connect(deployer).transfer(PositionManagerDistributor.address, totalAmount);
 
-            await PositionManager.connect(manager).distributeRewards();
+            await PositionManager.connect(manager).distributeRewards(0);
 
             const user1USDTBalance = await USDTContract.balanceOf(user1.address);
             const user2USDTBalance = await USDTContract.balanceOf(user2.address);

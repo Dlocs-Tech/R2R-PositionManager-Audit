@@ -105,7 +105,7 @@ contract PositionManagerDistributor is IPositionManagerDistributor, Ownable {
     }
 
     /// @notice Distribute the rewards to the users and FundsDistributor.
-    function distributeRewards(address fundsDistributor, uint256 fundsDistributorPercentage) external {
+    function distributeRewards(address fundsDistributor, uint256 fundsDistributorPercentage, uint256 amountOutMin) external {
         if (msg.sender != address(positionManager)) revert WrongCaller();
 
         uint256 contractBalance = usdt.balanceOf(address(this));
@@ -126,7 +126,7 @@ contract PositionManagerDistributor is IPositionManagerDistributor, Ownable {
                     fee: FEE,
                     recipient: address(this),
                     amountIn: amountToDistribute,
-                    amountOutMinimum: 0,
+                    amountOutMinimum: amountOutMin,
                     sqrtPriceLimitX96: 0
                 })
             );
@@ -149,7 +149,7 @@ contract PositionManagerDistributor is IPositionManagerDistributor, Ownable {
                 fee: FEE,
                 recipient: address(this),
                 amountIn: fundsDistributorAmount,
-                amountOutMinimum: 0,
+                amountOutMinimum: amountOutMin,
                 sqrtPriceLimitX96: 0
             })
         );

@@ -426,8 +426,8 @@ contract PositionManager is FeeManagement, IPancakeV3SwapCallback, AccessControl
     }
 
     /// @notice Function to distribute the rewards.
-    function distributeRewards() external onlyRole(MANAGER_ROLE) {
-        IPositionManagerDistributor(factory).distributeRewards(fundsDistributor, fundsDistributorPercentage);
+    function distributeRewards(uint256 amountOutMin) external onlyRole(MANAGER_ROLE) {
+        IPositionManagerDistributor(factory).distributeRewards(fundsDistributor, fundsDistributorPercentage, amountOutMin);
     }
 
     /// @dev This percentage is of amount0.
