@@ -4,11 +4,9 @@ pragma solidity ^0.8.22;
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {FullMath} from "@aperture_finance/uni-v3-lib/src/FullMath.sol";
-import {SafeMath} from "@openzeppelin/contracts/utils/math/SafeMath.sol";
 
 contract FeeManagement {
     using SafeERC20 for IERC20;
-    using SafeMath for uint256;
 
     uint256 public constant MAX_PERCENTAGE = 1_000_000; // 100%
 
@@ -43,7 +41,7 @@ contract FeeManagement {
 
         _chargeFee(fee);
 
-        return amount.sub(fee);
+        return amount - fee;
     }
 
     function _chargeFee(uint256 fee) internal {
