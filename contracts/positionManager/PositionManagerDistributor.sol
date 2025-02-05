@@ -5,6 +5,8 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
+import {FullMath} from "@aperture_finance/uni-v3-lib/src/FullMath.sol";
+import {SafeMath} from "@openzeppelin/contracts/utils/math/SafeMath.sol";
 
 import {IPositionManagerDistributor} from "../interfaces/positionManager/IPositionManagerDistributor.sol";
 import {IFundsDistributor} from "../interfaces/IFundsDistributor.sol";
@@ -13,10 +15,11 @@ import {PositionManager} from "./PositionManager.sol";
 
 contract PositionManagerDistributor is IPositionManagerDistributor, Ownable {
     using SafeERC20 for IERC20;
+    using SafeMath for uint256;
     using EnumerableSet for EnumerableSet.AddressSet;
 
     /// @dev Maximum percentage value.
-    uint256 public constant MAX_PERCENTAGE = 1000000;
+    uint256 public constant MAX_PERCENTAGE = 1_000_000;
 
     /// @dev Fee used in swaps from USDT to wnative.
     uint24 public constant FEE = 100;
@@ -111,7 +114,7 @@ contract PositionManagerDistributor is IPositionManagerDistributor, Ownable {
 
         if (contractBalance <= usersTotalBalances) revert InvalidEntry(); // To distribute the surplus
 
-        uint256 amountToDistribute = contractBalance - usersTotalBalances;
+        uint256 amountToDistribute = contractBalance.sub(usersTotalBalances);
 
         uint256 totalShares = IERC20(positionManager).totalSupply();
 
@@ -137,7 +140,7 @@ contract PositionManagerDistributor is IPositionManagerDistributor, Ownable {
         }
 
         // Send fundsDistributorPercentage of the tokens to fundsDistributor
-        uint256 fundsDistributorAmount = (amountToDistribute * fundsDistributorPercentage) / MAX_PERCENTAGE;
+        uint256 fundsDistributorAmount = FullMath.mulDiv(amountToDistribute, fundsDistributorPercentage, MAX_PERCENTAGE);
 
         _approveToken(usdt, address(swapRouter), fundsDistributorAmount);
 
@@ -155,27 +158,27 @@ contract PositionManagerDistributor is IPositionManagerDistributor, Ownable {
 
         wnative.safeTransfer(fundsDistributor, wbnbBalance);
 
-        amountToDistribute -= fundsDistributorAmount;
+        amountToDistribute = amountToDistribute.sub(fundsDistributorAmount);
 
         uint256 usersLength = _usersSet.length();
 
-        usersTotalBalances += amountToDistribute;
+        usersTotalBalances = usersTotalBalances.add(amountToDistribute);
 
         for (uint256 i; i < usersLength; i++) {
             address user = _usersSet.at(i);
 
             // Calculate percentage of the shares over the total supply
-            uint256 userPercentage = (IERC20(positionManager).balanceOf(user) * MAX_PERCENTAGE) / totalShares; // 1000000 = 100%
+            uint256 userPercentage = FullMath.mulDiv(IERC20(positionManager).balanceOf(user), MAX_PERCENTAGE, totalShares);
 
             // Calculate the amount of USDT of that user using the percentage
-            uint256 userUsdt = (amountToDistribute * userPercentage) / MAX_PERCENTAGE;
+            uint256 userUsdt = FullMath.mulDiv(amountToDistribute, userPercentage, MAX_PERCENTAGE);
 
             if (userUsdt == 0) continue; // Should not happen
 
-            _balances[user] += userUsdt;
+            _balances[user] = _balances[user].add(userUsdt);
         }
 
-        emit RewardsDistributed(amountToDistribute + fundsDistributorAmount);
+        emit RewardsDistributed(amountToDistribute.add(fundsDistributorAmount));
     }
 
     /// @notice Collect the rewards of the user.
@@ -186,7 +189,7 @@ contract PositionManagerDistributor is IPositionManagerDistributor, Ownable {
 
         _balances[msg.sender] = 0;
 
-        usersTotalBalances -= rewards;
+        usersTotalBalances = usersTotalBalances.sub(rewards);
 
         IERC20(PositionManager(positionManager).usdt()).safeTransfer(msg.sender, rewards);
     }
