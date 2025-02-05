@@ -6,7 +6,6 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import {FullMath} from "@aperture_finance/uni-v3-lib/src/FullMath.sol";
-import {SafeMath} from "@openzeppelin/contracts/utils/math/SafeMath.sol";
 
 import {IPositionManagerDistributor} from "../interfaces/positionManager/IPositionManagerDistributor.sol";
 import {IFundsDistributor} from "../interfaces/IFundsDistributor.sol";
@@ -15,7 +14,6 @@ import {PositionManager} from "./PositionManager.sol";
 
 contract PositionManagerDistributor is IPositionManagerDistributor, Ownable {
     using SafeERC20 for IERC20;
-    using SafeMath for uint256;
     using EnumerableSet for EnumerableSet.AddressSet;
 
     /// @dev Maximum percentage value.
@@ -103,7 +101,7 @@ contract PositionManagerDistributor is IPositionManagerDistributor, Ownable {
     function withdraw() external {
         positionManager.withdraw(msg.sender);
 
-        if (positionManager.balanceOf(msg.sender) == 0) _usersSet.remove(msg.sender);
+        _usersSet.remove(msg.sender);
     }
 
     /// @notice Distribute the rewards to the users and FundsDistributor.
@@ -114,7 +112,7 @@ contract PositionManagerDistributor is IPositionManagerDistributor, Ownable {
 
         if (contractBalance <= usersTotalBalances) revert InvalidEntry(); // To distribute the surplus
 
-        uint256 amountToDistribute = contractBalance.sub(usersTotalBalances);
+        uint256 amountToDistribute = contractBalance - usersTotalBalances;
 
         uint256 totalShares = IERC20(positionManager).totalSupply();
 
@@ -158,11 +156,11 @@ contract PositionManagerDistributor is IPositionManagerDistributor, Ownable {
 
         wnative.safeTransfer(fundsDistributor, wbnbBalance);
 
-        amountToDistribute = amountToDistribute.sub(fundsDistributorAmount);
+        amountToDistribute -= fundsDistributorAmount;
 
         uint256 usersLength = _usersSet.length();
 
-        usersTotalBalances = usersTotalBalances.add(amountToDistribute);
+        usersTotalBalances += amountToDistribute;
 
         for (uint256 i; i < usersLength; i++) {
             address user = _usersSet.at(i);
@@ -175,10 +173,10 @@ contract PositionManagerDistributor is IPositionManagerDistributor, Ownable {
 
             if (userUsdt == 0) continue; // Should not happen
 
-            _balances[user] = _balances[user].add(userUsdt);
+            _balances[user] += userUsdt;
         }
 
-        emit RewardsDistributed(amountToDistribute.add(fundsDistributorAmount));
+        emit RewardsDistributed(amountToDistribute + fundsDistributorAmount);
     }
 
     /// @notice Collect the rewards of the user.
@@ -189,7 +187,7 @@ contract PositionManagerDistributor is IPositionManagerDistributor, Ownable {
 
         _balances[msg.sender] = 0;
 
-        usersTotalBalances = usersTotalBalances.sub(rewards);
+        usersTotalBalances -= rewards;
 
         IERC20(PositionManager(positionManager).usdt()).safeTransfer(msg.sender, rewards);
     }

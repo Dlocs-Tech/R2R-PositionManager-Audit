@@ -2,7 +2,6 @@
 pragma solidity ^0.8.22;
 
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
-import {SafeMath} from "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {IPancakeV3Pool} from "@pancakeswap/v3-core/contracts/interfaces/IPancakeV3Pool.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
@@ -29,9 +28,6 @@ import {FeeManagement} from "./FeeManagement.sol";
  */
 contract PositionManager is FeeManagement, IPancakeV3SwapCallback, AccessControl, ReentrancyGuard, ERC20 {
     using SafeERC20 for IERC20;
-    using SafeMath for uint256;
-    using SafeMath for uint160;
-    using SafeMath for uint128;
     using Path for bytes;
 
     /// @notice Precision used in the contract.
@@ -176,7 +172,7 @@ contract PositionManager is FeeManagement, IPancakeV3SwapCallback, AccessControl
 
         depositAmount = _chargeDepositFee(depositAmount);
 
-        uint256 token1Price = _getChainlinkPrice().mul(PRECISION);
+        uint256 token1Price = _getChainlinkPrice() * PRECISION;
 
         // Invest the USDT in the current position if the contract is in position
         if (_tickLower != _tickUpper) {
@@ -205,14 +201,14 @@ contract PositionManager is FeeManagement, IPancakeV3SwapCallback, AccessControl
 
             uint160 sqrtPriceByTick = TickMath.getSqrtRatioAtTick(tick);
 
-            uint256 price = FullMath.mulDiv(uint256(sqrtPriceByTick).mul(uint256(sqrtPriceByTick)), PRECISION, 2 ** (96 * 2));
+            uint256 price = FullMath.mulDiv(uint256(sqrtPriceByTick) * uint256(sqrtPriceByTick), PRECISION, 2 ** (96 * 2));
 
             // Calculate contract balance in token1
             (uint256 pool0, uint256 pool1) = getTotalAmounts();
 
-            pool1 = pool1.sub(userLiq);
+            pool1 -= userLiq;
 
-            uint256 token1ContractAmount = FullMath.mulDiv(pool0, price, PRECISION).add(pool1);
+            uint256 token1ContractAmount = FullMath.mulDiv(pool0, price, PRECISION) + pool1;
 
             // Calculate shares to mint (totalSupply cannot be 0 if the contract is in position)
             shares = FullMath.mulDiv(userLiq, totalSupply(), token1ContractAmount);
@@ -229,7 +225,7 @@ contract PositionManager is FeeManagement, IPancakeV3SwapCallback, AccessControl
                 address(this),
                 false, // token1 to token0
                 int256(amount1ToSwap),
-                uint160(FullMath.mulDiv(sqrtPriceByTick, MAX_PERCENTAGE.add(slippage), MAX_PERCENTAGE)),
+                uint160(FullMath.mulDiv(sqrtPriceByTick, MAX_PERCENTAGE + slippage, MAX_PERCENTAGE)),
                 ""
             );
 
@@ -240,7 +236,7 @@ contract PositionManager is FeeManagement, IPancakeV3SwapCallback, AccessControl
             shares = FullMath.mulDiv(depositAmount, token1Price, PRECISION);
 
             if (totalSupply() > 0) {
-                uint256 contractAmount = usdt.balanceOf(address(this)).sub(depositAmount);
+                uint256 contractAmount = usdt.balanceOf(address(this)) - depositAmount;
 
                 uint256 token1ContractAmount = FullMath.mulDiv(contractAmount, token1Price, PRECISION);
 
@@ -319,7 +315,7 @@ contract PositionManager is FeeManagement, IPancakeV3SwapCallback, AccessControl
 
         if (usdtAmount == 0) revert InvalidEntry();
 
-        uint256 token1Price = _getChainlinkPrice().mul(PRECISION);
+        uint256 token1Price = _getChainlinkPrice() * PRECISION;
 
         uint256 amountOutMin = _getAmountMin(usdtAmount, token1Price, false);
 
@@ -330,7 +326,7 @@ contract PositionManager is FeeManagement, IPancakeV3SwapCallback, AccessControl
 
         uint160 sqrtPriceByTick = TickMath.getSqrtRatioAtTick(tick);
 
-        uint256 price = FullMath.mulDiv(uint256(sqrtPriceByTick).mul(uint256(sqrtPriceByTick)), PRECISION, 2 ** (96 * 2));
+        uint256 price = FullMath.mulDiv(uint256(sqrtPriceByTick) * uint256(sqrtPriceByTick), PRECISION, 2 ** (96 * 2));
 
         // Calculate the amount of token1 to swap
         uint256 percentage0 = getRangePercentage(FullMath.mulDiv(contractLiq, PRECISION, price), contractLiq);
@@ -346,7 +342,7 @@ contract PositionManager is FeeManagement, IPancakeV3SwapCallback, AccessControl
                 address(this),
                 false, // token1 to token0
                 int256(amount1ToSwap),
-                uint160(FullMath.mulDiv(sqrtPriceByTick, MAX_PERCENTAGE.add(slippage), MAX_PERCENTAGE)),
+                uint160(FullMath.mulDiv(sqrtPriceByTick, MAX_PERCENTAGE + slippage, MAX_PERCENTAGE)),
                 ""
             );
         }
@@ -370,7 +366,7 @@ contract PositionManager is FeeManagement, IPancakeV3SwapCallback, AccessControl
         // Swap token0 and token1 to USDT
         (uint256 pool0, uint256 pool1) = getTotalAmounts();
 
-        uint256 token1Price = _getChainlinkPrice().mul(PRECISION);
+        uint256 token1Price = _getChainlinkPrice() * PRECISION;
 
         uint256 amountOutMin = _getAmountMin(pool1, token1Price, true);
 
@@ -381,7 +377,7 @@ contract PositionManager is FeeManagement, IPancakeV3SwapCallback, AccessControl
 
         uint160 sqrtPriceByTick = TickMath.getSqrtRatioAtTick(tick);
 
-        uint256 price = FullMath.mulDiv(uint256(sqrtPriceByTick).mul(uint256(sqrtPriceByTick)), PRECISION, 2 ** (96 * 2));
+        uint256 price = FullMath.mulDiv(uint256(sqrtPriceByTick) * uint256(sqrtPriceByTick), PRECISION, 2 ** (96 * 2));
 
         amountOutMin = FullMath.mulDiv(pool0, price, PRECISION); // amountOutMin in token0 to token1
 
@@ -402,10 +398,10 @@ contract PositionManager is FeeManagement, IPancakeV3SwapCallback, AccessControl
 
         (uint256 pool0After, uint256 pool1After) = getTotalAmounts();
 
-        uint256 amount0 = pool0After.sub(pool0Before);
-        uint256 amount1 = pool1After.sub(pool1Before);
+        uint256 amount0 = pool0After - pool0Before;
+        uint256 amount1 = pool1After - pool1Before;
 
-        uint256 token1Price = _getChainlinkPrice().mul(PRECISION);
+        uint256 token1Price = _getChainlinkPrice() * PRECISION;
 
         uint256 amountOutMin = _getAmountMin(amount1, token1Price, true);
 
@@ -417,7 +413,7 @@ contract PositionManager is FeeManagement, IPancakeV3SwapCallback, AccessControl
 
         uint160 sqrtPriceByTick = TickMath.getSqrtRatioAtTick(tick);
 
-        uint256 price = FullMath.mulDiv(uint256(sqrtPriceByTick).mul(uint256(sqrtPriceByTick)), PRECISION, 2 ** (96 * 2));
+        uint256 price = FullMath.mulDiv(uint256(sqrtPriceByTick) * uint256(sqrtPriceByTick), PRECISION, 2 ** (96 * 2));
 
         amountOutMin = FullMath.mulDiv(amount0, PRECISION, price); // amountOutMin in token0 to token1
 
@@ -426,7 +422,7 @@ contract PositionManager is FeeManagement, IPancakeV3SwapCallback, AccessControl
         // Swap token0 to USDT
         amount0 = _swapUsingPath(token0ToUsdtPath, amount0, amountOutMin);
 
-        if (amount0.add(amount1) > 0) usdt.safeTransfer(factory, amount0 + amount1);
+        if (amount0 + amount1 > 0) usdt.safeTransfer(factory, amount0 + amount1);
     }
 
     /// @notice Function to distribute the rewards.
@@ -444,7 +440,7 @@ contract PositionManager is FeeManagement, IPancakeV3SwapCallback, AccessControl
         uint128 liquidity0 = LiquidityAmounts.getLiquidityForAmount0Sorted(sqrtPriceX96, sqrtRatioBX96, amount0);
         uint128 liquidity1 = LiquidityAmounts.getLiquidityForAmount1Sorted(sqrtRatioAX96, sqrtPriceX96, amount1);
 
-        return FullMath.mulDiv(liquidity0, uint128(PRECISION), liquidity0.add(liquidity1));
+        return FullMath.mulDiv(liquidity0, uint128(PRECISION), liquidity0 + liquidity1);
     }
 
     /// @notice Function to get the current tick range of the position.
@@ -511,19 +507,19 @@ contract PositionManager is FeeManagement, IPancakeV3SwapCallback, AccessControl
         uint256 amountOutMin;
 
         if (fromToken) {
-            amountOutMin = FullMath.mulDiv(amount, price, PRECISION).div(10 ** 8); // 10**8 is the precision of the token1Price
+            amountOutMin = FullMath.mulDiv(amount, price, PRECISION) / 10 ** 8; // 10**8 is the precision of the token1Price
         } else {
-            amountOutMin = FullMath.mulDiv(amount, (PRECISION).mul(10 ** 8), price); // 10**8 is the precision of the token1Price
+            amountOutMin = FullMath.mulDiv(amount, (PRECISION) * 10 ** 8, price); // 10**8 is the precision of the token1Price
         }
 
         // amountOutMin with slippage applied
-        return FullMath.mulDiv(amountOutMin, MAX_PERCENTAGE.sub(slippage), MAX_PERCENTAGE);
+        return FullMath.mulDiv(amountOutMin, MAX_PERCENTAGE - slippage, MAX_PERCENTAGE);
     }
 
     function _getChainlinkPrice() internal view returns (uint256) {
         (, int256 price, , uint256 updatedAt, ) = dataFeed.latestRoundData();
 
-        if (price <= 0 || block.timestamp.sub(15 minutes) > updatedAt) revert InvalidInput();
+        if (price <= 0 || block.timestamp - 15 minutes > updatedAt) revert InvalidInput();
 
         return (uint256(price));
     }
