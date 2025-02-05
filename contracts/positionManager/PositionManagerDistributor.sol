@@ -94,7 +94,7 @@ contract PositionManagerDistributor is IPositionManagerDistributor, Ownable {
 
     /// @notice Deposit USDT to the positionManager.
     function deposit(uint256 depositAmount) external returns (uint256 shares) {
-        if (!_usersSet.contains(msg.sender)) _usersSet.add(msg.sender);
+        _usersSet.add(msg.sender);
 
         return positionManager.deposit(depositAmount, msg.sender);
     }
