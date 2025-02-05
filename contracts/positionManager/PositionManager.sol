@@ -521,7 +521,10 @@ contract PositionManager is FeeManagement, IPancakeV3SwapCallback, AccessControl
     }
 
     function _getChainlinkPrice() internal view returns (uint256) {
-        (, int256 price, , , ) = dataFeed.latestRoundData();
+        (, int256 price, , uint256 updatedAt, ) = dataFeed.latestRoundData();
+
+        if (price <= 0 || block.timestamp.sub(15 minutes) > updatedAt) revert InvalidInput();
+
         return (uint256(price));
     }
 
