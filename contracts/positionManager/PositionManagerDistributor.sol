@@ -5,6 +5,7 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
+import {FullMath} from "@aperture_finance/uni-v3-lib/src/FullMath.sol";
 
 import {IPositionManagerDistributor} from "../interfaces/positionManager/IPositionManagerDistributor.sol";
 import {IFundsDistributor} from "../interfaces/IFundsDistributor.sol";
@@ -16,7 +17,7 @@ contract PositionManagerDistributor is IPositionManagerDistributor, Ownable {
     using EnumerableSet for EnumerableSet.AddressSet;
 
     /// @dev Maximum percentage value.
-    uint256 public constant MAX_PERCENTAGE = 1000000;
+    uint256 public constant MAX_PERCENTAGE = 1_000_000;
 
     /// @dev Fee used in swaps from USDT to wnative.
     uint24 public constant FEE = 100;
@@ -91,7 +92,7 @@ contract PositionManagerDistributor is IPositionManagerDistributor, Ownable {
 
     /// @notice Deposit USDT to the positionManager.
     function deposit(uint256 depositAmount) external returns (uint256 shares) {
-        if (!_usersSet.contains(msg.sender)) _usersSet.add(msg.sender);
+        _usersSet.add(msg.sender);
 
         return positionManager.deposit(depositAmount, msg.sender);
     }
@@ -100,11 +101,11 @@ contract PositionManagerDistributor is IPositionManagerDistributor, Ownable {
     function withdraw() external {
         positionManager.withdraw(msg.sender);
 
-        if (positionManager.balanceOf(msg.sender) == 0) _usersSet.remove(msg.sender);
+        _usersSet.remove(msg.sender);
     }
 
     /// @notice Distribute the rewards to the users and FundsDistributor.
-    function distributeRewards(address fundsDistributor, uint256 fundsDistributorPercentage) external {
+    function distributeRewards(address fundsDistributor, uint256 fundsDistributorPercentage, uint256 amountOutMin) external {
         if (msg.sender != address(positionManager)) revert WrongCaller();
 
         uint256 contractBalance = usdt.balanceOf(address(this));
@@ -125,7 +126,7 @@ contract PositionManagerDistributor is IPositionManagerDistributor, Ownable {
                     fee: FEE,
                     recipient: address(this),
                     amountIn: amountToDistribute,
-                    amountOutMinimum: 0,
+                    amountOutMinimum: amountOutMin,
                     sqrtPriceLimitX96: 0
                 })
             );
@@ -137,7 +138,7 @@ contract PositionManagerDistributor is IPositionManagerDistributor, Ownable {
         }
 
         // Send fundsDistributorPercentage of the tokens to fundsDistributor
-        uint256 fundsDistributorAmount = (amountToDistribute * fundsDistributorPercentage) / MAX_PERCENTAGE;
+        uint256 fundsDistributorAmount = FullMath.mulDiv(amountToDistribute, fundsDistributorPercentage, MAX_PERCENTAGE);
 
         _approveToken(usdt, address(swapRouter), fundsDistributorAmount);
 
@@ -148,7 +149,7 @@ contract PositionManagerDistributor is IPositionManagerDistributor, Ownable {
                 fee: FEE,
                 recipient: address(this),
                 amountIn: fundsDistributorAmount,
-                amountOutMinimum: 0,
+                amountOutMinimum: amountOutMin,
                 sqrtPriceLimitX96: 0
             })
         );
@@ -165,10 +166,10 @@ contract PositionManagerDistributor is IPositionManagerDistributor, Ownable {
             address user = _usersSet.at(i);
 
             // Calculate percentage of the shares over the total supply
-            uint256 userPercentage = (IERC20(positionManager).balanceOf(user) * MAX_PERCENTAGE) / totalShares; // 1000000 = 100%
+            uint256 userPercentage = FullMath.mulDiv(IERC20(positionManager).balanceOf(user), MAX_PERCENTAGE, totalShares);
 
             // Calculate the amount of USDT of that user using the percentage
-            uint256 userUsdt = (amountToDistribute * userPercentage) / MAX_PERCENTAGE;
+            uint256 userUsdt = FullMath.mulDiv(amountToDistribute, userPercentage, MAX_PERCENTAGE);
 
             if (userUsdt == 0) continue; // Should not happen
 

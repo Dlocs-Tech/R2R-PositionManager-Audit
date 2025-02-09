@@ -2,7 +2,6 @@
 pragma solidity ^0.8.22;
 
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
-import {SafeMath} from "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {IPancakeV3Pool} from "@pancakeswap/v3-core/contracts/interfaces/IPancakeV3Pool.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
@@ -29,9 +28,6 @@ import {FeeManagement} from "./FeeManagement.sol";
  */
 contract PositionManager is FeeManagement, IPancakeV3SwapCallback, AccessControl, ReentrancyGuard, ERC20 {
     using SafeERC20 for IERC20;
-    using SafeMath for uint256;
-    using SafeMath for uint160;
-    using SafeMath for uint128;
     using Path for bytes;
 
     /// @notice Precision used in the contract.
@@ -83,7 +79,10 @@ contract PositionManager is FeeManagement, IPancakeV3SwapCallback, AccessControl
     uint256 public fundsDistributorPercentage;
 
     /// @notice Max slippage percentage allowed in swaps.
-    uint256 private slippage = 10000; // 1%
+    uint256 private slippage = 10_000; // 1%
+
+    /// @notice Minimum USDT deposit amount.
+    uint256 public minDepositAmount = 10e18; // 10 USDT
 
     /// @notice Path used to swap USDT to token0.
     bytes public usdtToToken0Path;
@@ -166,19 +165,29 @@ contract PositionManager is FeeManagement, IPancakeV3SwapCallback, AccessControl
      * @dev The user must approve the contract to spend the USDT before calling this function.
      */
     function deposit(uint256 depositAmount, address sender) external onlyFactory returns (uint256 shares) {
-        if (depositAmount == 0) revert InvalidInput();
+        if (depositAmount < minDepositAmount) revert InvalidInput();
 
         // Transfer USDT from user to contract
         usdt.safeTransferFrom(sender, address(this), depositAmount);
 
         depositAmount = _chargeDepositFee(depositAmount);
 
+        uint256 token1Price = _getChainlinkPrice() * PRECISION;
+
         // Invest the USDT in the current position if the contract is in position
         if (_tickLower != _tickUpper) {
-            // Swap user USDT to token1
-            uint256 userLiq = _swapUsingPath(usdtToToken1Path, depositAmount);
+            uint256 amountOutMin = _getAmountMin(depositAmount, token1Price, false);
 
-            if (usdt.balanceOf(address(this)) > 0) _swapUsingPath(usdtToToken1Path, usdt.balanceOf(address(this)));
+            // Swap user USDT to token1
+            uint256 userLiq = _swapUsingPath(usdtToToken1Path, depositAmount, amountOutMin);
+
+            if (usdt.balanceOf(address(this)) > 0) {
+                uint256 usdtAmount = usdt.balanceOf(address(this));
+
+                amountOutMin = _getAmountMin(usdtAmount, token1Price, false);
+
+                _swapUsingPath(usdtToToken1Path, usdtAmount, amountOutMin);
+            }
 
             uint256 totalLiq = token1.balanceOf(address(this));
 
@@ -192,22 +201,22 @@ contract PositionManager is FeeManagement, IPancakeV3SwapCallback, AccessControl
 
             uint160 sqrtPriceByTick = TickMath.getSqrtRatioAtTick(tick);
 
-            uint256 price = FullMath.mulDiv(uint256(sqrtPriceByTick).mul(uint256(sqrtPriceByTick)), PRECISION, 2 ** (96 * 2));
+            uint256 price = FullMath.mulDiv(uint256(sqrtPriceByTick) * uint256(sqrtPriceByTick), PRECISION, 2 ** (96 * 2));
 
             // Calculate contract balance in token1
-            (uint256 pool0, uint256 pool1) = _getTotalAmounts();
+            (uint256 pool0, uint256 pool1) = getTotalAmounts();
 
-            pool1 = pool1.sub(userLiq);
+            pool1 -= userLiq;
 
-            uint256 token1ContractAmount = (pool0.mul(price).div(PRECISION)).add(pool1);
+            uint256 token1ContractAmount = FullMath.mulDiv(pool0, price, PRECISION) + pool1;
 
             // Calculate shares to mint (totalSupply cannot be 0 if the contract is in position)
-            shares = userLiq.mul(totalSupply()).div(token1ContractAmount);
+            shares = FullMath.mulDiv(userLiq, totalSupply(), token1ContractAmount);
 
             // Calculate the amount of token1 to swap
-            uint256 percentage0 = getRangePercentage((totalLiq).mul(PRECISION).div(price), totalLiq);
+            uint256 percentage0 = getRangePercentage(FullMath.mulDiv(totalLiq, PRECISION, price), totalLiq);
 
-            uint256 amount1ToSwap = (totalLiq).mul(percentage0).div(PRECISION);
+            uint256 amount1ToSwap = FullMath.mulDiv(totalLiq, percentage0, PRECISION);
 
             // Approve token1 to pool
             _approveToken(token1, address(pool), amount1ToSwap);
@@ -216,25 +225,22 @@ contract PositionManager is FeeManagement, IPancakeV3SwapCallback, AccessControl
                 address(this),
                 false, // token1 to token0
                 int256(amount1ToSwap),
-                uint160(sqrtPriceByTick.mul(MAX_PERCENTAGE.add(slippage)).div(MAX_PERCENTAGE)),
+                uint160(FullMath.mulDiv(sqrtPriceByTick, MAX_PERCENTAGE + slippage, MAX_PERCENTAGE)),
                 ""
             );
 
             _addLiquidity();
         } else {
             // Case when the contract is not in position
-            // Calculate the price of token1 over token0
-            uint256 token1Price = _getChainlinkPrice().mul(PRECISION);
-
             // Calculate the amount of shares to mint
-            shares = depositAmount.mul(token1Price).div(PRECISION);
+            shares = FullMath.mulDiv(depositAmount, token1Price, PRECISION);
 
             if (totalSupply() > 0) {
-                uint256 contractAmount = usdt.balanceOf(address(this)).sub(depositAmount);
+                uint256 contractAmount = usdt.balanceOf(address(this)) - depositAmount;
 
-                uint256 token1ContractAmount = contractAmount.mul(token1Price).div(PRECISION);
+                uint256 token1ContractAmount = FullMath.mulDiv(contractAmount, token1Price, PRECISION);
 
-                shares = shares.mul(totalSupply()).div(token1ContractAmount);
+                shares = FullMath.mulDiv(shares, totalSupply(), token1ContractAmount);
             }
         }
 
@@ -261,8 +267,8 @@ contract PositionManager is FeeManagement, IPancakeV3SwapCallback, AccessControl
             // Burn liquidity from the position
             _burnLiquidity(_tickLower, _tickUpper, _liquidityForShares(_tickLower, _tickUpper, totalSupply()));
 
-            uint256 userAmount0 = token0.balanceOf(address(this)).mul(shares).div(totalSupply());
-            uint256 userAmount1 = token1.balanceOf(address(this)).mul(shares).div(totalSupply());
+            uint256 userAmount0 = FullMath.mulDiv(token0.balanceOf(address(this)), shares, totalSupply());
+            uint256 userAmount1 = FullMath.mulDiv(token1.balanceOf(address(this)), shares, totalSupply());
 
             if (userAmount0 > 0) token0.safeTransfer(sender, userAmount0);
             if (userAmount1 > 0) token1.safeTransfer(sender, userAmount1);
@@ -276,7 +282,7 @@ contract PositionManager is FeeManagement, IPancakeV3SwapCallback, AccessControl
             uint256 contractAmount = usdt.balanceOf(address(this));
 
             // Calculate the amount of usdt to send to the user
-            uint256 userUsdtAmount = contractAmount.mul(shares).div(totalSupply());
+            uint256 userUsdtAmount = FullMath.mulDiv(contractAmount, shares, totalSupply());
 
             usdt.safeTransfer(sender, userUsdtAmount);
         }
@@ -309,19 +315,23 @@ contract PositionManager is FeeManagement, IPancakeV3SwapCallback, AccessControl
 
         if (usdtAmount == 0) revert InvalidEntry();
 
-        uint256 contractLiq = _swapUsingPath(usdtToToken1Path, usdtAmount);
+        uint256 token1Price = _getChainlinkPrice() * PRECISION;
+
+        uint256 amountOutMin = _getAmountMin(usdtAmount, token1Price, false);
+
+        uint256 contractLiq = _swapUsingPath(usdtToToken1Path, usdtAmount, amountOutMin);
 
         // Calculate the price of token1 over token0
         (, int24 tick) = _priceAndTick();
 
         uint160 sqrtPriceByTick = TickMath.getSqrtRatioAtTick(tick);
 
-        uint256 price = FullMath.mulDiv(uint256(sqrtPriceByTick).mul(uint256(sqrtPriceByTick)), PRECISION, 2 ** (96 * 2));
+        uint256 price = FullMath.mulDiv(uint256(sqrtPriceByTick) * uint256(sqrtPriceByTick), PRECISION, 2 ** (96 * 2));
 
         // Calculate the amount of token1 to swap
-        uint256 percentage0 = getRangePercentage(contractLiq.mul(PRECISION).div(price), contractLiq);
+        uint256 percentage0 = getRangePercentage(FullMath.mulDiv(contractLiq, PRECISION, price), contractLiq);
 
-        uint256 amount1ToSwap = contractLiq.mul(percentage0).div(PRECISION);
+        uint256 amount1ToSwap = FullMath.mulDiv(contractLiq, percentage0, PRECISION);
 
         if (amount1ToSwap != 0) {
             // If current tick is out of the range, couldn't swap
@@ -332,7 +342,7 @@ contract PositionManager is FeeManagement, IPancakeV3SwapCallback, AccessControl
                 address(this),
                 false, // token1 to token0
                 int256(amount1ToSwap),
-                uint160(sqrtPriceByTick.mul(MAX_PERCENTAGE.add(slippage)).div(MAX_PERCENTAGE)),
+                uint160(FullMath.mulDiv(sqrtPriceByTick, MAX_PERCENTAGE + slippage, MAX_PERCENTAGE)),
                 ""
             );
         }
@@ -354,10 +364,26 @@ contract PositionManager is FeeManagement, IPancakeV3SwapCallback, AccessControl
         _burnLiquidity(_tickLower, _tickUpper, _liquidityForShares(_tickLower, _tickUpper, totalSupply()));
 
         // Swap token0 and token1 to USDT
-        (uint256 pool0, uint256 pool1) = _getTotalAmounts();
+        (uint256 pool0, uint256 pool1) = getTotalAmounts();
 
-        _swapUsingPath(token0ToUsdtPath, pool0);
-        _swapUsingPath(token1ToUsdtPath, pool1);
+        uint256 token1Price = _getChainlinkPrice() * PRECISION;
+
+        uint256 amountOutMin = _getAmountMin(pool1, token1Price, true);
+
+        _swapUsingPath(token1ToUsdtPath, pool1, amountOutMin);
+
+        // Calculate the price of token1 over token0
+        (, int24 tick) = _priceAndTick();
+
+        uint160 sqrtPriceByTick = TickMath.getSqrtRatioAtTick(tick);
+
+        uint256 price = FullMath.mulDiv(uint256(sqrtPriceByTick) * uint256(sqrtPriceByTick), PRECISION, 2 ** (96 * 2));
+
+        amountOutMin = FullMath.mulDiv(pool0, price, PRECISION); // amountOutMin in token0 to token1
+
+        amountOutMin = _getAmountMin(amountOutMin, token1Price, true);
+
+        _swapUsingPath(token0ToUsdtPath, pool0, amountOutMin);
 
         // Set the contract to not in position
         _tickLower = _tickUpper = 0;
@@ -365,26 +391,43 @@ contract PositionManager is FeeManagement, IPancakeV3SwapCallback, AccessControl
 
     /// @notice Function to collect the fees accumulated by the position and send them to the factory.
     function harvest() public {
-        (uint256 pool0Before, uint256 pool1Before) = _getTotalAmounts();
+        (uint256 pool0Before, uint256 pool1Before) = getTotalAmounts();
 
         // Collect fees
         _collect();
 
-        (uint256 pool0After, uint256 pool1After) = _getTotalAmounts();
+        (uint256 pool0After, uint256 pool1After) = getTotalAmounts();
 
-        uint256 amount0 = pool0After.sub(pool0Before);
-        uint256 amount1 = pool1After.sub(pool1Before);
+        uint256 amount0 = pool0After - pool0Before;
+        uint256 amount1 = pool1After - pool1Before;
 
-        // Swap token0 and token1 to USDT
-        amount0 = _swapUsingPath(token0ToUsdtPath, amount0);
-        amount1 = _swapUsingPath(token1ToUsdtPath, amount1);
+        uint256 token1Price = _getChainlinkPrice() * PRECISION;
 
-        if (amount0.add(amount1) > 0) usdt.safeTransfer(factory, amount0 + amount1);
+        uint256 amountOutMin = _getAmountMin(amount1, token1Price, true);
+
+        // Swap token1 to USDT
+        amount1 = _swapUsingPath(token1ToUsdtPath, amount1, amountOutMin);
+
+        // Calculate the price of token1 over token0
+        (, int24 tick) = _priceAndTick();
+
+        uint160 sqrtPriceByTick = TickMath.getSqrtRatioAtTick(tick);
+
+        uint256 price = FullMath.mulDiv(uint256(sqrtPriceByTick) * uint256(sqrtPriceByTick), PRECISION, 2 ** (96 * 2));
+
+        amountOutMin = FullMath.mulDiv(amount0, PRECISION, price); // amountOutMin in token0 to token1
+
+        amountOutMin = _getAmountMin(amountOutMin, token1Price, true);
+
+        // Swap token0 to USDT
+        amount0 = _swapUsingPath(token0ToUsdtPath, amount0, amountOutMin);
+
+        if (amount0 + amount1 > 0) usdt.safeTransfer(factory, amount0 + amount1);
     }
 
     /// @notice Function to distribute the rewards.
-    function distributeRewards() external {
-        IPositionManagerDistributor(factory).distributeRewards(fundsDistributor, fundsDistributorPercentage);
+    function distributeRewards(uint256 amountOutMin) external onlyRole(MANAGER_ROLE) {
+        IPositionManagerDistributor(factory).distributeRewards(fundsDistributor, fundsDistributorPercentage, amountOutMin);
     }
 
     /// @dev This percentage is of amount0.
@@ -397,7 +440,7 @@ contract PositionManager is FeeManagement, IPancakeV3SwapCallback, AccessControl
         uint128 liquidity0 = LiquidityAmounts.getLiquidityForAmount0Sorted(sqrtPriceX96, sqrtRatioBX96, amount0);
         uint128 liquidity1 = LiquidityAmounts.getLiquidityForAmount1Sorted(sqrtRatioAX96, sqrtPriceX96, amount1);
 
-        return liquidity0.mul(uint128(PRECISION)).div(liquidity0.add(liquidity1));
+        return FullMath.mulDiv(liquidity0, uint128(PRECISION), liquidity0 + liquidity1);
     }
 
     /// @notice Function to get the current tick range of the position.
@@ -408,6 +451,11 @@ contract PositionManager is FeeManagement, IPancakeV3SwapCallback, AccessControl
 
     function getAmount0ForLiquidity(uint160 sqrtRatioAX96, uint160 sqrtRatioBX96, uint128 liquidity) external pure returns (uint256 amount0) {
         return LiquidityAmounts.getAmount0ForLiquidity(sqrtRatioAX96, sqrtRatioBX96, liquidity);
+    }
+
+    function getTotalAmounts() public view returns (uint256 total0, uint256 total1) {
+        total0 = token0.balanceOf(address(this));
+        total1 = token1.balanceOf(address(this));
     }
 
     function setFundsDistributor(address _fundsDistributor, uint256 _fundsDistributorPercentage) external onlyRole(DEFAULT_ADMIN_ROLE) {
@@ -438,6 +486,14 @@ contract PositionManager is FeeManagement, IPancakeV3SwapCallback, AccessControl
         slippage = _slippage;
     }
 
+    function setMinDepositAmount(uint256 _minDepositAmount) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        minDepositAmount = _minDepositAmount;
+    }
+
+    function setFee(uint256 _depositFee, address _feeReceiver) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _setFee(_depositFee, _feeReceiver);
+    }
+
     /**
      * @notice The sqrt price and the current tick of the pool.
      * @return sqrtPriceX96 The sqrt price of the pool.
@@ -447,29 +503,40 @@ contract PositionManager is FeeManagement, IPancakeV3SwapCallback, AccessControl
         (sqrtPriceX96, tick, , , , , ) = pool.slot0();
     }
 
-    function _getTotalAmounts() public view returns (uint256 total0, uint256 total1) {
-        total0 = token0.balanceOf(address(this));
-        total1 = token1.balanceOf(address(this));
+    function _getAmountMin(uint256 amount, uint256 price, bool fromToken) internal view returns (uint256) {
+        uint256 amountOutMin;
+
+        if (fromToken) {
+            amountOutMin = FullMath.mulDiv(amount, price, PRECISION) / 10 ** 8; // 10**8 is the precision of the token1Price
+        } else {
+            amountOutMin = FullMath.mulDiv(amount, (PRECISION) * 10 ** 8, price); // 10**8 is the precision of the token1Price
+        }
+
+        // amountOutMin with slippage applied
+        return FullMath.mulDiv(amountOutMin, MAX_PERCENTAGE - slippage, MAX_PERCENTAGE);
     }
 
     function _getChainlinkPrice() internal view returns (uint256) {
-        (, int256 price, , , ) = dataFeed.latestRoundData();
+        (, int256 price, , uint256 updatedAt, ) = dataFeed.latestRoundData();
+
+        if (price <= 0 || block.timestamp - 15 minutes > updatedAt) revert InvalidInput();
+
         return (uint256(price));
     }
 
-    function _swapUsingPath(bytes memory path, uint256 amount) internal returns (uint256) {
+    function _swapUsingPath(bytes memory path, uint256 amount, uint256 amountOutMin) internal returns (uint256) {
         if (path.length == 0 || amount == 0) return amount;
 
         (address pathToken0, ) = path.decodeFirstPool();
 
         _approveToken(IERC20(pathToken0), swapRouter, amount);
 
-        return AlgebraUtils.swap(swapRouter, path, amount);
+        return AlgebraUtils.swap(swapRouter, path, amount, amountOutMin);
     }
 
     function _liquidityForShares(int24 tickLower, int24 tickUpper, uint256 shares) internal view returns (uint128) {
         uint128 position = _position(tickLower, tickUpper);
-        return _uint128Safe(uint256(position).mul(shares).div(totalSupply()));
+        return _uint128Safe(FullMath.mulDiv(uint256(position), shares, totalSupply()));
     }
 
     function _position(int24 tickLower, int24 tickUpper) internal view returns (uint128 liquidity) {
@@ -484,7 +551,7 @@ contract PositionManager is FeeManagement, IPancakeV3SwapCallback, AccessControl
 
     /// @notice Adds liquidity to the position.
     function _addLiquidity() private {
-        (uint256 bal0, uint256 bal1) = _getTotalAmounts();
+        (uint256 bal0, uint256 bal1) = getTotalAmounts();
 
         // Then we fetch how much liquidity we get for adding at the main position ticks with our token balances.
         (uint160 price, ) = _priceAndTick();
